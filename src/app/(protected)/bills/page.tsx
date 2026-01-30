@@ -107,7 +107,7 @@ export default function BillsPage() {
             </div>
 
             {/* Stats Card */}
-            <div className="card" style={{ marginBottom: 'var(--space-lg)', background: 'var(--gradient-primary)' }}>
+            <div className="card card-primary" style={{ marginBottom: 'var(--space-lg)' }}>
                 <div className="text-muted">Remaining to Pay {ownerFilter !== 'all' && `(${getMember(ownerFilter)?.displayName})`}</div>
                 <div className="amount-large">{unpaidBills.length > 0 ? formatAmount(totalDue, unpaidBills[0]?.currency || 'EUR') : '€0.00'}</div>
                 <div className="text-secondary">{unpaidBills.length} of {filteredBills.length} bills unpaid</div>

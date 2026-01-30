@@ -87,7 +87,7 @@ export default function LoansPage() {
             </div>
 
             {/* Stats Card */}
-            <div className="card" style={{ marginBottom: 'var(--space-lg)', background: 'var(--gradient-primary)' }}>
+            <div className="card card-primary" style={{ marginBottom: 'var(--space-lg)' }}>
                 <div className="text-muted">Total Outstanding {ownerFilter !== 'all' && `(${getMember(ownerFilter)?.displayName})`}</div>
                 <div className="amount-large">{filteredLoans.length > 0 ? formatAmount(totalOutstanding, filteredLoans[0]?.currency || 'EUR') : '€0.00'}</div>
                 <div className="text-secondary">{filteredLoans.length} active loan{filteredLoans.length !== 1 ? 's' : ''}</div>
