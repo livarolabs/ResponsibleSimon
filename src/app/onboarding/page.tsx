@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -13,10 +13,10 @@ import { AVATAR_OPTIONS } from '@/lib/types';
 type Step = 'profile' | 'household';
 
 export default function OnboardingPage() {
-    const { user } = useAuth();
+    const { user, loading, needsOnboarding, refreshProfile } = useAuth();
     const router = useRouter();
     const [step, setStep] = useState<Step>('profile');
-    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
 
     // Profile state
@@ -28,11 +28,22 @@ export default function OnboardingPage() {
     const [householdName, setHouseholdName] = useState('');
     const [inviteCode, setInviteCode] = useState('');
 
+    // Redirect if not logged in or already onboarded
+    useEffect(() => {
+        if (!loading) {
+            if (!user) {
+                router.replace('/login');
+            } else if (!needsOnboarding) {
+                router.replace('/dashboard');
+            }
+        }
+    }, [user, loading, needsOnboarding, router]);
+
     const handleProfileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
 
-        setLoading(true);
+        setSubmitting(true);
         setError('');
 
         try {
@@ -42,7 +53,7 @@ export default function OnboardingPage() {
             console.error('Error creating profile:', err);
             setError('Failed to create profile. Please try again.');
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
 
@@ -50,7 +61,7 @@ export default function OnboardingPage() {
         e.preventDefault();
         if (!user) return;
 
-        setLoading(true);
+        setSubmitting(true);
         setError('');
 
         try {
@@ -60,18 +71,40 @@ export default function OnboardingPage() {
                 const household = await joinHousehold(user.uid, inviteCode);
                 if (!household) {
                     setError('Invalid invite code. Please check and try again.');
-                    setLoading(false);
+                    setSubmitting(false);
                     return;
                 }
             }
+            // Refresh profile data in context
+            await refreshProfile();
             router.push('/dashboard');
         } catch (err) {
             console.error('Error with household:', err);
             setError('Something went wrong. Please try again.');
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
+
+    // Show loading while checking auth
+    if (loading) {
+        return (
+            <div style={{
+                minHeight: '100vh',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--color-bg)'
+            }}>
+                <div className="skeleton" style={{ width: 48, height: 48, borderRadius: '50%' }} />
+            </div>
+        );
+    }
+
+    // Don't render if redirecting
+    if (!user || !needsOnboarding) {
+        return null;
+    }
 
     return (
         <div className="page" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -134,10 +167,10 @@ export default function OnboardingPage() {
                         <button
                             type="submit"
                             className="btn btn-primary btn-full"
-                            disabled={loading || !displayName}
+                            disabled={submitting || !displayName}
                             style={{ marginTop: 'var(--space-lg)' }}
                         >
-                            {loading ? 'Saving...' : 'Continue →'}
+                            {submitting ? 'Saving...' : 'Continue →'}
                         </button>
                     </form>
                 </>
@@ -159,6 +192,7 @@ export default function OnboardingPage() {
                     {/* Choice Tabs */}
                     <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
                         <button
+                            type="button"
                             onClick={() => setHouseholdChoice('create')}
                             className={`btn ${householdChoice === 'create' ? 'btn-primary' : 'btn-secondary'}`}
                             style={{ flex: 1 }}
@@ -166,6 +200,7 @@ export default function OnboardingPage() {
                             🏠 Create New
                         </button>
                         <button
+                            type="button"
                             onClick={() => setHouseholdChoice('join')}
                             className={`btn ${householdChoice === 'join' ? 'btn-primary' : 'btn-secondary'}`}
                             style={{ flex: 1 }}
@@ -200,7 +235,7 @@ export default function OnboardingPage() {
                                     placeholder="ABC123"
                                     maxLength={6}
                                     style={{ textAlign: 'center', fontSize: '24px', letterSpacing: '4px' }}
-                                    required
+                                    required={householdChoice === 'join'}
                                 />
                                 <p className="text-muted text-sm" style={{ marginTop: 'var(--space-xs)' }}>
                                     Ask your partner for their household code
@@ -211,10 +246,10 @@ export default function OnboardingPage() {
                         <button
                             type="submit"
                             className="btn btn-primary btn-full"
-                            disabled={loading || (householdChoice === 'join' && !inviteCode)}
+                            disabled={submitting || (householdChoice === 'join' && !inviteCode)}
                             style={{ marginTop: 'var(--space-lg)' }}
                         >
-                            {loading ? 'Setting up...' : householdChoice === 'create' ? 'Create Household' : 'Join Household'}
+                            {submitting ? 'Setting up...' : householdChoice === 'create' ? 'Create Household' : 'Join Household'}
                         </button>
                     </form>
                 </>
