@@ -150,10 +150,11 @@ export async function getLoanPayments(loanId: string): Promise<LoanPayment[]> {
 }
 
 // Calculate total outstanding loans by currency
-export async function getTotalLoansOutstanding(householdId: string): Promise<{ EUR: number; HUF: number }> {
+export async function getTotalLoansOutstanding(householdId: string): Promise<{ EUR: number; HUF: number; PLN: number }> {
     const loans = await getLoans(householdId);
     return {
         EUR: loans.filter(l => l.currency === 'EUR').reduce((sum, l) => sum + l.remainingAmount, 0),
-        HUF: loans.filter(l => l.currency === 'HUF').reduce((sum, l) => sum + l.remainingAmount, 0)
+        HUF: loans.filter(l => l.currency === 'HUF').reduce((sum, l) => sum + l.remainingAmount, 0),
+        PLN: loans.filter(l => l.currency === 'PLN').reduce((sum, l) => sum + l.remainingAmount, 0)
     };
 }

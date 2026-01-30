@@ -152,7 +152,7 @@ export async function getPaybacks(withdrawalId: string): Promise<SavingsPayback[
 }
 
 // Calculate total owed to self by currency
-export async function getTotalOwedToSelf(householdId: string): Promise<{ EUR: number; HUF: number }> {
+export async function getTotalOwedToSelf(householdId: string): Promise<{ EUR: number; HUF: number; PLN: number }> {
     const withdrawals = await getWithdrawals(householdId);
     return {
         EUR: withdrawals
@@ -160,6 +160,9 @@ export async function getTotalOwedToSelf(householdId: string): Promise<{ EUR: nu
             .reduce((sum, w) => sum + (w.withdrawnAmount - w.paidBackAmount), 0),
         HUF: withdrawals
             .filter(w => w.currency === 'HUF')
+            .reduce((sum, w) => sum + (w.withdrawnAmount - w.paidBackAmount), 0),
+        PLN: withdrawals
+            .filter(w => w.currency === 'PLN')
             .reduce((sum, w) => sum + (w.withdrawnAmount - w.paidBackAmount), 0)
     };
 }

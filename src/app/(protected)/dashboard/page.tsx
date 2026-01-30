@@ -70,10 +70,23 @@ export default function DashboardPage() {
         return acc;
     }, {} as Record<Currency, number>);
 
-    const formatTotals = (totals: Record<Currency, number>) => {
-        const entries = Object.entries(totals).filter(([, v]) => v > 0);
+    const renderTotals = (totals: Record<Currency, number>) => {
+        const order: Currency[] = ['EUR', 'HUF', 'PLN'];
+        const entries = order
+            .map(c => ({ currency: c, value: totals[c] || 0 }))
+            .filter(e => e.value > 0);
+
         if (entries.length === 0) return '€0.00';
-        return entries.map(([c, v]) => formatAmount(v, c as Currency)).join(' + ');
+
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {entries.map(e => (
+                    <div key={e.currency} style={{ lineHeight: '1.1' }}>
+                        {formatAmount(e.value, e.currency)}
+                    </div>
+                ))}
+            </div>
+        );
     };
 
     if (loading) {
@@ -115,7 +128,7 @@ export default function DashboardPage() {
                             <div className="text-muted text-sm">Bills Due</div>
                             <span style={{ fontSize: '20px', color: 'var(--color-text-muted)' }}>➔</span>
                         </div>
-                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{formatTotals(billTotals)}</div>
+                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{renderTotals(billTotals)}</div>
                         <div className="text-secondary" style={{ fontSize: '14px' }}>{unpaidBills.length} unpaid</div>
 
                         {/* Inline Action */}
@@ -131,7 +144,7 @@ export default function DashboardPage() {
                             <div className="text-muted text-sm">Loans Outstanding</div>
                             <span style={{ fontSize: '20px', color: 'var(--color-text-muted)' }}>➔</span>
                         </div>
-                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{formatTotals(loanTotals)}</div>
+                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{renderTotals(loanTotals)}</div>
                         <div className="text-secondary" style={{ fontSize: '14px' }}>{loans.length} active</div>
 
                         <object style={{ position: 'absolute', bottom: 'var(--space-md)', right: 'var(--space-md)' }}>
@@ -146,7 +159,7 @@ export default function DashboardPage() {
                             <div className="text-muted text-sm">Owe Yourself</div>
                             <span style={{ fontSize: '20px', color: 'var(--color-text-muted)' }}>➔</span>
                         </div>
-                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{formatTotals(savingsTotals)}</div>
+                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{renderTotals(savingsTotals)}</div>
                         <div className="text-secondary" style={{ fontSize: '14px' }}>{withdrawals.length} withdrawal{withdrawals.length !== 1 ? 's' : ''}</div>
 
                         <object style={{ position: 'absolute', bottom: 'var(--space-md)', right: 'var(--space-md)' }}>

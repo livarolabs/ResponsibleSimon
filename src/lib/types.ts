@@ -1,11 +1,12 @@
 // Shared types and constants for the app
 import { UserProfile } from './user-service';
 
-export type Currency = 'EUR' | 'HUF';
+export type Currency = 'EUR' | 'HUF' | 'PLN';
 
 export const CURRENCIES: { value: Currency; label: string; symbol: string }[] = [
     { value: 'EUR', label: 'Euro', symbol: '€' },
-    { value: 'HUF', label: 'Hungarian Forint', symbol: 'Ft' }
+    { value: 'HUF', label: 'Hungarian Forint', symbol: 'Ft' },
+    { value: 'PLN', label: 'Polish Zloty', symbol: 'zł' }
 ];
 
 // Avatar options for user profiles
@@ -22,6 +23,9 @@ export function formatAmount(amount: number, currency: Currency): string {
     const symbol = getCurrencySymbol(currency);
     if (currency === 'HUF') {
         return `${amount.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${symbol}`;
+    }
+    if (currency === 'PLN') {
+        return `${amount.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} ${symbol}`;
     }
     return `${symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
