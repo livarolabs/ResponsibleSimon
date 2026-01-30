@@ -7,58 +7,59 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Recurring Bills
+    // User Profiles - users can read any profile but only write their own
+    match /userProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Households - members can read/write their household
+    match /households/{householdId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+    }
+    
+    // Recurring Bills - household members can access
     match /recurringBills/{billId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        resource == null || resource.data.userId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
     
     // Bill Payments
     match /billPayments/{paymentId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        resource == null || resource.data.userId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
     
     // Loans
     match /loans/{loanId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        resource == null || resource.data.userId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
     
     // Loan Payments
     match /loanPayments/{paymentId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        resource == null || resource.data.userId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
     
     // Savings Withdrawals
     match /savingsWithdrawals/{withdrawalId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        resource == null || resource.data.userId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
     
     // Savings Paybacks
     match /savingsPaybacks/{paybackId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        resource == null || resource.data.userId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
   }
 }

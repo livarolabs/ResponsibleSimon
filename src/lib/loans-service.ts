@@ -11,18 +11,18 @@ import {
     Timestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Currency, Owner } from './types';
+import { Currency } from './types';
 
 // Types
 export interface Loan {
     id: string;
-    userId: string;
+    householdId: string;
+    ownerId: string;
     name: string;
     lender: string;
     originalAmount: number;
     remainingAmount: number;
     currency: Currency;
-    owner: Owner;
     interestRate: number;
     createdAt: Timestamp;
 }
@@ -30,7 +30,7 @@ export interface Loan {
 export interface LoanPayment {
     id: string;
     loanId: string;
-    userId: string;
+    householdId: string;
     amount: number;
     currency: Currency;
     note: string;
@@ -39,22 +39,24 @@ export interface LoanPayment {
 
 // Loans CRUD Operations
 export async function createLoan(
-    userId: string,
-    loan: Omit<Loan, 'id' | 'userId' | 'createdAt'>
+    householdId: string,
+    ownerId: string,
+    loan: Omit<Loan, 'id' | 'householdId' | 'ownerId' | 'createdAt'>
 ): Promise<string> {
     const docRef = await addDoc(collection(db, 'loans'), {
         ...loan,
-        userId,
+        householdId,
+        ownerId,
         createdAt: Timestamp.now()
     });
     return docRef.id;
 }
 
-export async function getLoans(userId: string): Promise<Loan[]> {
+export async function getLoans(householdId: string): Promise<Loan[]> {
     try {
         const q = query(
             collection(db, 'loans'),
-            where('userId', '==', userId),
+            where('householdId', '==', householdId),
             where('remainingAmount', '>', 0),
             orderBy('remainingAmount', 'desc')
         );
@@ -68,7 +70,7 @@ export async function getLoans(userId: string): Promise<Loan[]> {
         console.warn('Index not ready, using fallback query:', error);
         const q = query(
             collection(db, 'loans'),
-            where('userId', '==', userId)
+            where('householdId', '==', householdId)
         );
         const snapshot = await getDocs(q);
         const all = snapshot.docs.map(doc => ({
@@ -81,10 +83,10 @@ export async function getLoans(userId: string): Promise<Loan[]> {
     }
 }
 
-export async function getAllLoans(userId: string): Promise<Loan[]> {
+export async function getAllLoans(householdId: string): Promise<Loan[]> {
     const q = query(
         collection(db, 'loans'),
-        where('userId', '==', userId),
+        where('householdId', '==', householdId),
         orderBy('createdAt', 'desc')
     );
 
@@ -106,7 +108,7 @@ export async function deleteLoan(loanId: string): Promise<void> {
 // Loan Payments Operations
 export async function createLoanPayment(
     loanId: string,
-    userId: string,
+    householdId: string,
     amount: number,
     currency: Currency,
     note: string = ''
@@ -114,7 +116,7 @@ export async function createLoanPayment(
     // Add payment record
     const docRef = await addDoc(collection(db, 'loanPayments'), {
         loanId,
-        userId,
+        householdId,
         amount,
         currency,
         note,
@@ -122,7 +124,7 @@ export async function createLoanPayment(
     });
 
     // Update loan remaining amount
-    const loans = await getLoans(userId);
+    const loans = await getLoans(householdId);
     const loan = loans.find(l => l.id === loanId);
     if (loan) {
         const newRemaining = Math.max(0, loan.remainingAmount - amount);
@@ -147,8 +149,8 @@ export async function getLoanPayments(loanId: string): Promise<LoanPayment[]> {
 }
 
 // Calculate total outstanding loans by currency
-export async function getTotalLoansOutstanding(userId: string): Promise<{ EUR: number; HUF: number }> {
-    const loans = await getLoans(userId);
+export async function getTotalLoansOutstanding(householdId: string): Promise<{ EUR: number; HUF: number }> {
+    const loans = await getLoans(householdId);
     return {
         EUR: loans.filter(l => l.currency === 'EUR').reduce((sum, l) => sum + l.remainingAmount, 0),
         HUF: loans.filter(l => l.currency === 'HUF').reduce((sum, l) => sum + l.remainingAmount, 0)

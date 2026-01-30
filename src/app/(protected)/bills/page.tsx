@@ -11,25 +11,25 @@ import {
     getMonthName,
     BillWithStatus
 } from '@/lib/bills-service';
-import { formatAmount, Owner, OWNERS } from '@/lib/types';
+import { formatAmount } from '@/lib/types';
 
 export default function BillsPage() {
-    const { user } = useAuth();
+    const { household, householdMembers } = useAuth();
     const [bills, setBills] = useState<BillWithStatus[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [ownerFilter, setOwnerFilter] = useState<Owner | 'all'>('all');
+    const [ownerFilter, setOwnerFilter] = useState<string | 'all'>('all');
 
     const monthYear = getCurrentMonthYear();
 
     useEffect(() => {
         loadBills();
-    }, [user]);
+    }, [household]);
 
     const loadBills = async () => {
-        if (!user) return;
+        if (!household) return;
         try {
-            const data = await getBillsWithStatus(user.uid, monthYear);
+            const data = await getBillsWithStatus(household.id, monthYear);
             setBills(data);
         } catch (err) {
             console.error('Error loading bills:', err);
@@ -58,10 +58,15 @@ export default function BillsPage() {
         }
     };
 
+    // Get member info
+    const getMember = (ownerId: string) => {
+        return householdMembers.find(m => m.id === ownerId);
+    };
+
     // Filter by owner
     const filteredBills = ownerFilter === 'all'
         ? bills
-        : bills.filter(b => b.owner === ownerFilter);
+        : bills.filter(b => b.ownerId === ownerFilter);
 
     const unpaidBills = filteredBills.filter(b => !b.isPaid);
     const paidBills = filteredBills.filter(b => b.isPaid);
@@ -89,21 +94,21 @@ export default function BillsPage() {
                 >
                     All
                 </button>
-                {OWNERS.map(o => (
+                {householdMembers.map(member => (
                     <button
-                        key={o.value}
-                        onClick={() => setOwnerFilter(o.value)}
-                        className={`btn ${ownerFilter === o.value ? 'btn-primary' : 'btn-secondary'}`}
+                        key={member.id}
+                        onClick={() => setOwnerFilter(member.id)}
+                        className={`btn ${ownerFilter === member.id ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ padding: '6px 12px', fontSize: 'var(--font-size-sm)' }}
                     >
-                        {o.emoji} {o.value}
+                        {member.avatarEmoji} {member.displayName}
                     </button>
                 ))}
             </div>
 
             {/* Stats Card */}
             <div className="card" style={{ marginBottom: 'var(--space-lg)', background: 'var(--gradient-primary)' }}>
-                <div className="text-muted">Remaining to Pay {ownerFilter !== 'all' && `(${ownerFilter})`}</div>
+                <div className="text-muted">Remaining to Pay {ownerFilter !== 'all' && `(${getMember(ownerFilter)?.displayName})`}</div>
                 <div className="amount-large">{unpaidBills.length > 0 ? formatAmount(totalDue, unpaidBills[0]?.currency || 'EUR') : '€0.00'}</div>
                 <div className="text-secondary">{unpaidBills.length} of {filteredBills.length} bills unpaid</div>
             </div>
@@ -114,35 +119,40 @@ export default function BillsPage() {
                     <h3 className="font-semibold" style={{ marginBottom: 'var(--space-sm)', color: 'var(--color-error)' }}>
                         Unpaid ({unpaidBills.length})
                     </h3>
-                    {unpaidBills.map(bill => (
-                        <div key={bill.id} className="card" style={{ marginBottom: 'var(--space-sm)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={bill.isPaid}
-                                    onChange={() => handleTogglePaid(bill)}
-                                    style={{ width: 24, height: 24, cursor: 'pointer' }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                        <span className="font-semibold">{bill.name}</span>
-                                        <span style={{
-                                            fontSize: 'var(--font-size-xs)',
-                                            padding: '2px 6px',
-                                            borderRadius: 'var(--radius-full)',
-                                            background: bill.owner === 'Simon' ? 'var(--color-primary)' : 'var(--color-secondary)',
-                                            color: 'white'
-                                        }}>
-                                            {bill.owner === 'Simon' ? '👨' : '👩'} {bill.owner}
-                                        </span>
+                    {unpaidBills.map(bill => {
+                        const member = getMember(bill.ownerId);
+                        return (
+                            <div key={bill.id} className="card" style={{ marginBottom: 'var(--space-sm)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={bill.isPaid}
+                                        onChange={() => handleTogglePaid(bill)}
+                                        style={{ width: 24, height: 24, cursor: 'pointer' }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                            <span className="font-semibold">{bill.name}</span>
+                                            {member && (
+                                                <span style={{
+                                                    fontSize: 'var(--font-size-xs)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: 'var(--radius-full)',
+                                                    background: 'var(--color-primary)',
+                                                    color: 'white'
+                                                }}>
+                                                    {member.avatarEmoji} {member.displayName}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-muted text-sm">Due day {bill.dayOfMonth} · {bill.category}</div>
                                     </div>
-                                    <div className="text-muted text-sm">Due day {bill.dayOfMonth} · {bill.category}</div>
+                                    <div className="font-semibold">{formatAmount(bill.amount, bill.currency)}</div>
+                                    <button onClick={() => handleDelete(bill.id)} className="text-muted" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>🗑️</button>
                                 </div>
-                                <div className="font-semibold">{formatAmount(bill.amount, bill.currency)}</div>
-                                <button onClick={() => handleDelete(bill.id)} className="text-muted" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>🗑️</button>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </>
             )}
 
@@ -152,34 +162,39 @@ export default function BillsPage() {
                     <h3 className="font-semibold" style={{ marginTop: 'var(--space-lg)', marginBottom: 'var(--space-sm)', color: 'var(--color-success)' }}>
                         ✓ Paid ({paidBills.length})
                     </h3>
-                    {paidBills.map(bill => (
-                        <div key={bill.id} className="card" style={{ marginBottom: 'var(--space-sm)', opacity: 0.7 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={bill.isPaid}
-                                    onChange={() => handleTogglePaid(bill)}
-                                    style={{ width: 24, height: 24, cursor: 'pointer' }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                        <span className="font-semibold" style={{ textDecoration: 'line-through' }}>{bill.name}</span>
-                                        <span style={{
-                                            fontSize: 'var(--font-size-xs)',
-                                            padding: '2px 6px',
-                                            borderRadius: 'var(--radius-full)',
-                                            background: bill.owner === 'Simon' ? 'var(--color-primary)' : 'var(--color-secondary)',
-                                            opacity: 0.7
-                                        }}>
-                                            {bill.owner === 'Simon' ? '👨' : '👩'}
-                                        </span>
+                    {paidBills.map(bill => {
+                        const member = getMember(bill.ownerId);
+                        return (
+                            <div key={bill.id} className="card" style={{ marginBottom: 'var(--space-sm)', opacity: 0.7 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={bill.isPaid}
+                                        onChange={() => handleTogglePaid(bill)}
+                                        style={{ width: 24, height: 24, cursor: 'pointer' }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                            <span className="font-semibold" style={{ textDecoration: 'line-through' }}>{bill.name}</span>
+                                            {member && (
+                                                <span style={{
+                                                    fontSize: 'var(--font-size-xs)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: 'var(--radius-full)',
+                                                    background: 'var(--color-primary)',
+                                                    opacity: 0.7
+                                                }}>
+                                                    {member.avatarEmoji}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-muted text-sm">{bill.category}</div>
                                     </div>
-                                    <div className="text-muted text-sm">{bill.category}</div>
+                                    <div className="text-muted" style={{ textDecoration: 'line-through' }}>{formatAmount(bill.amount, bill.currency)}</div>
                                 </div>
-                                <div className="text-muted" style={{ textDecoration: 'line-through' }}>{formatAmount(bill.amount, bill.currency)}</div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </>
             )}
 
@@ -187,8 +202,8 @@ export default function BillsPage() {
             {filteredBills.length === 0 && (
                 <div className="empty-state">
                     <p style={{ fontSize: '48px', marginBottom: 'var(--space-md)' }}>📋</p>
-                    <h3>No bills {ownerFilter !== 'all' ? `for ${ownerFilter}` : 'yet'}</h3>
-                    <p className="text-muted">{ownerFilter === 'all' ? 'Add your first recurring bill to get started' : `No bills assigned to ${ownerFilter}`}</p>
+                    <h3>No bills {ownerFilter !== 'all' ? `for ${getMember(ownerFilter)?.displayName}` : 'yet'}</h3>
+                    <p className="text-muted">{ownerFilter === 'all' ? 'Add your first recurring bill to get started' : `No bills assigned`}</p>
                 </div>
             )}
 

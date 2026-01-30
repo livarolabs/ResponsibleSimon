@@ -5,33 +5,27 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import {
     getWithdrawals,
-    createPayback,
     deleteWithdrawal,
-    getPaybackProgress,
-    SavingsWithdrawal
+    SavingsWithdrawal,
+    getPaybackProgress
 } from '@/lib/savings-service';
-import { formatAmount, Currency, Owner, OWNERS } from '@/lib/types';
+import { formatAmount } from '@/lib/types';
 
 export default function SavingsPage() {
-    const { user } = useAuth();
+    const { household, householdMembers } = useAuth();
     const [withdrawals, setWithdrawals] = useState<SavingsWithdrawal[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [ownerFilter, setOwnerFilter] = useState<Owner | 'all'>('all');
-
-    // Payback modal state
-    const [showModal, setShowModal] = useState(false);
-    const [selectedWithdrawal, setSelectedWithdrawal] = useState<SavingsWithdrawal | null>(null);
-    const [paybackAmount, setPaybackAmount] = useState('');
+    const [ownerFilter, setOwnerFilter] = useState<string | 'all'>('all');
 
     useEffect(() => {
         loadWithdrawals();
-    }, [user]);
+    }, [household]);
 
     const loadWithdrawals = async () => {
-        if (!user) return;
+        if (!household) return;
         try {
-            const data = await getWithdrawals(user.uid);
+            const data = await getWithdrawals(household.id);
             setWithdrawals(data);
         } catch (err) {
             console.error('Error loading withdrawals:', err);
@@ -41,50 +35,27 @@ export default function SavingsPage() {
         }
     };
 
-    const handlePayback = async () => {
-        if (!selectedWithdrawal || !user || !paybackAmount) return;
+    const handleDelete = async (id: string) => {
+        if (!confirm('Delete this withdrawal?')) return;
         try {
-            await createPayback(
-                selectedWithdrawal.id,
-                user.uid,
-                parseFloat(paybackAmount),
-                selectedWithdrawal.currency
-            );
-            setShowModal(false);
-            setPaybackAmount('');
-            setSelectedWithdrawal(null);
+            await deleteWithdrawal(id);
             await loadWithdrawals();
         } catch (err) {
-            console.error('Error making payback:', err);
+            console.error('Error deleting:', err);
         }
     };
 
-    const handleDelete = async (withdrawalId: string) => {
-        if (!confirm('Delete this withdrawal record?')) return;
-        try {
-            await deleteWithdrawal(withdrawalId);
-            await loadWithdrawals();
-        } catch (err) {
-            console.error('Error deleting withdrawal:', err);
-        }
+    // Get member info
+    const getMember = (ownerId: string) => {
+        return householdMembers.find(m => m.id === ownerId);
     };
 
-    const openPaybackModal = (withdrawal: SavingsWithdrawal) => {
-        setSelectedWithdrawal(withdrawal);
-        setShowModal(true);
-    };
-
-    // Filter withdrawals by owner
+    // Filter by owner
     const filteredWithdrawals = ownerFilter === 'all'
         ? withdrawals
-        : withdrawals.filter(w => w.owner === ownerFilter);
+        : withdrawals.filter(w => w.ownerId === ownerFilter);
 
-    // Calculate totals by currency (from filtered)
-    const totals = filteredWithdrawals.reduce((acc, w) => {
-        const owed = w.withdrawnAmount - w.paidBackAmount;
-        acc[w.currency] = (acc[w.currency] || 0) + owed;
-        return acc;
-    }, {} as Record<Currency, number>);
+    const totalOwed = filteredWithdrawals.reduce((sum, w) => sum + (w.withdrawnAmount - w.paidBackAmount), 0);
 
     if (loading) {
         return <div className="page"><div className="skeleton" style={{ height: 200 }}></div></div>;
@@ -94,7 +65,7 @@ export default function SavingsPage() {
         <div className="page">
             <div className="page-header">
                 <h1 className="page-title">🔄 Payback</h1>
-                <p className="page-subtitle">Pay yourself back</p>
+                <p className="page-subtitle">Track what you owe yourself</p>
             </div>
 
             {error && <div className="card" style={{ background: 'rgba(239, 68, 68, 0.1)', marginBottom: 'var(--space-md)' }}>{error}</div>}
@@ -108,69 +79,68 @@ export default function SavingsPage() {
                 >
                     All
                 </button>
-                {OWNERS.map(o => (
+                {householdMembers.map(member => (
                     <button
-                        key={o.value}
-                        onClick={() => setOwnerFilter(o.value)}
-                        className={`btn ${ownerFilter === o.value ? 'btn-primary' : 'btn-secondary'}`}
+                        key={member.id}
+                        onClick={() => setOwnerFilter(member.id)}
+                        className={`btn ${ownerFilter === member.id ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ padding: '6px 12px', fontSize: 'var(--font-size-sm)' }}
                     >
-                        {o.emoji} {o.value}
+                        {member.avatarEmoji} {member.displayName}
                     </button>
                 ))}
             </div>
 
             {/* Stats Card */}
             <div className="card" style={{ marginBottom: 'var(--space-lg)', background: 'var(--gradient-primary)' }}>
-                <div className="text-muted">Owed to Yourself {ownerFilter !== 'all' && `(${ownerFilter})`}</div>
-                {Object.entries(totals).map(([currency, amount]) => (
-                    <div key={currency} className="amount-large">{formatAmount(amount, currency as Currency)}</div>
-                ))}
-                {Object.keys(totals).length === 0 && <div className="amount-large">€0.00</div>}
-                <div className="text-secondary">{filteredWithdrawals.length} active withdrawal{filteredWithdrawals.length !== 1 ? 's' : ''}</div>
+                <div className="text-muted">Owed to Yourself {ownerFilter !== 'all' && `(${getMember(ownerFilter)?.displayName})`}</div>
+                <div className="amount-large">{filteredWithdrawals.length > 0 ? formatAmount(totalOwed, filteredWithdrawals[0]?.currency || 'EUR') : '€0.00'}</div>
+                <div className="text-secondary">{filteredWithdrawals.length} withdrawal{filteredWithdrawals.length !== 1 ? 's' : ''} to pay back</div>
             </div>
 
             {/* Withdrawals List */}
             {filteredWithdrawals.map(withdrawal => {
                 const progress = getPaybackProgress(withdrawal);
                 const remaining = withdrawal.withdrawnAmount - withdrawal.paidBackAmount;
+                const member = getMember(withdrawal.ownerId);
                 return (
-                    <div key={withdrawal.id} className="card" style={{ marginBottom: 'var(--space-md)' }}>
+                    <div key={withdrawal.id} className="card" style={{ marginBottom: 'var(--space-sm)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-sm)' }}>
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                                     <span className="font-semibold">{withdrawal.description}</span>
-                                    <span style={{
-                                        fontSize: 'var(--font-size-xs)',
-                                        padding: '2px 6px',
-                                        borderRadius: 'var(--radius-full)',
-                                        background: withdrawal.owner === 'Simon' ? 'var(--color-primary)' : 'var(--color-secondary)',
-                                        color: 'white'
-                                    }}>
-                                        {withdrawal.owner === 'Simon' ? '👨' : '👩'} {withdrawal.owner}
-                                    </span>
+                                    {member && (
+                                        <span style={{
+                                            fontSize: 'var(--font-size-xs)',
+                                            padding: '2px 6px',
+                                            borderRadius: 'var(--radius-full)',
+                                            background: 'var(--color-primary)',
+                                            color: 'white'
+                                        }}>
+                                            {member.avatarEmoji} {member.displayName}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="text-muted text-sm">
-                                    {withdrawal.withdrawnAt.toDate().toLocaleDateString()}
+                                    {withdrawal.withdrawnAt?.toDate?.()?.toLocaleDateString?.() || 'Unknown date'}
                                 </div>
                             </div>
-                            <button onClick={() => handleDelete(withdrawal.id)} className="text-muted" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>🗑️</button>
+                            <div style={{ textAlign: 'right' }}>
+                                <div className="font-semibold">{formatAmount(remaining, withdrawal.currency)}</div>
+                                <div className="text-muted text-sm">of {formatAmount(withdrawal.withdrawnAmount, withdrawal.currency)}</div>
+                            </div>
                         </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-xs)' }}>
-                            <span className="text-muted">Still owe yourself</span>
-                            <span className="font-semibold">{formatAmount(remaining, withdrawal.currency)}</span>
+                        <div className="progress-bar">
+                            <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
                         </div>
-
-                        <div className="progress" style={{ marginBottom: 'var(--space-sm)' }}>
-                            <div className="progress-fill" style={{ width: `${progress}%` }}></div>
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span className="text-sm text-muted">{progress}% paid back ({formatAmount(withdrawal.paidBackAmount, withdrawal.currency)} of {formatAmount(withdrawal.withdrawnAmount, withdrawal.currency)})</span>
-                            <button onClick={() => openPaybackModal(withdrawal)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 'var(--font-size-sm)' }}>
-                                Pay Back
-                            </button>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-sm)' }}>
+                            <span className="text-muted text-sm">{progress}% paid back</span>
+                            <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                <Link href={`/savings/${withdrawal.id}/pay`} className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 'var(--font-size-sm)' }}>
+                                    Pay Back
+                                </Link>
+                                <button onClick={() => handleDelete(withdrawal.id)} className="text-muted" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>🗑️</button>
+                            </div>
                         </div>
                     </div>
                 );
@@ -181,7 +151,7 @@ export default function SavingsPage() {
                 <div className="empty-state">
                     <p style={{ fontSize: '48px', marginBottom: 'var(--space-md)' }}>🔄</p>
                     <h3>No withdrawals to pay back</h3>
-                    <p className="text-muted">{ownerFilter !== 'all' ? `No withdrawals for ${ownerFilter}` : 'Record when you borrow from savings'}</p>
+                    <p className="text-muted">{ownerFilter !== 'all' ? `No withdrawals for ${getMember(ownerFilter)?.displayName}` : 'Record when you borrow from savings'}</p>
                 </div>
             )}
 
@@ -189,36 +159,6 @@ export default function SavingsPage() {
             <Link href="/savings/add" className="btn btn-primary btn-full" style={{ marginTop: 'var(--space-lg)' }}>
                 + Record Withdrawal
             </Link>
-
-            {/* Payback Modal */}
-            {showModal && selectedWithdrawal && (
-                <div className="modal-overlay" onClick={() => setShowModal(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <h3 className="font-semibold" style={{ marginBottom: 'var(--space-md)' }}>Pay Yourself Back</h3>
-                        <p className="text-muted" style={{ marginBottom: 'var(--space-md)' }}>
-                            {selectedWithdrawal.description} · {formatAmount(selectedWithdrawal.withdrawnAmount - selectedWithdrawal.paidBackAmount, selectedWithdrawal.currency)} remaining
-                        </p>
-
-                        <div className="form-group">
-                            <label className="form-label">Payback Amount</label>
-                            <input
-                                type="number"
-                                className="input"
-                                value={paybackAmount}
-                                onChange={e => setPaybackAmount(e.target.value)}
-                                placeholder="0.00"
-                                step="0.01"
-                                max={selectedWithdrawal.withdrawnAmount - selectedWithdrawal.paidBackAmount}
-                            />
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                            <button onClick={() => setShowModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
-                            <button onClick={handlePayback} className="btn btn-primary" style={{ flex: 1 }}>Confirm Payback</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

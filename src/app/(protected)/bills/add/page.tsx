@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createBill } from '@/lib/bills-service';
-import { Currency, Owner, CURRENCIES, OWNERS } from '@/lib/types';
+import { Currency, CURRENCIES } from '@/lib/types';
 import FormattedNumberInput from '@/components/FormattedNumberInput';
 
 export default function AddBillPage() {
-    const { user } = useAuth();
+    const { user, household, householdMembers } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -16,7 +16,7 @@ export default function AddBillPage() {
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [currency, setCurrency] = useState<Currency>('EUR');
-    const [owner, setOwner] = useState<Owner>('Simon');
+    const [ownerId, setOwnerId] = useState(user?.uid || '');
     const [category, setCategory] = useState('utilities');
     const [dayOfMonth, setDayOfMonth] = useState('1');
 
@@ -27,17 +27,16 @@ export default function AddBillPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || !household) return;
 
         setLoading(true);
         setError('');
 
         try {
-            await createBill(user.uid, {
+            await createBill(household.id, ownerId || user.uid, {
                 name,
                 amount: parseFloat(amount),
                 currency,
-                owner,
                 category,
                 dayOfMonth: parseInt(dayOfMonth),
                 isActive: true
@@ -103,15 +102,15 @@ export default function AddBillPage() {
                 <div className="form-group">
                     <label className="form-label">Responsible</label>
                     <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                        {OWNERS.map(o => (
+                        {householdMembers.map(member => (
                             <button
-                                key={o.value}
+                                key={member.id}
                                 type="button"
-                                onClick={() => setOwner(o.value)}
-                                className={`btn ${owner === o.value ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setOwnerId(member.id)}
+                                className={`btn ${ownerId === member.id ? 'btn-primary' : 'btn-secondary'}`}
                                 style={{ flex: 1 }}
                             >
-                                {o.emoji} {o.label}
+                                {member.avatarEmoji} {member.displayName}
                             </button>
                         ))}
                     </div>

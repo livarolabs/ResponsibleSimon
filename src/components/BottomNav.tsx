@@ -8,6 +8,7 @@ const navItems = [
     { href: '/bills', icon: '📋', label: 'Bills' },
     { href: '/loans', icon: '💳', label: 'Loans' },
     { href: '/savings', icon: '🔄', label: 'Payback' },
+    { href: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
 export default function BottomNav() {

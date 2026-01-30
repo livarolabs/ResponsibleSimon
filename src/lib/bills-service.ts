@@ -12,16 +12,16 @@ import {
     setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Currency, Owner } from './types';
+import { Currency } from './types';
 
 // Types
 export interface RecurringBill {
     id: string;
-    userId: string;
+    householdId: string;
+    ownerId: string; // User ID of responsible person
     name: string;
     amount: number;
     currency: Currency;
-    owner: Owner;
     category: string;
     dayOfMonth: number;
     isActive: boolean;
@@ -31,7 +31,7 @@ export interface RecurringBill {
 export interface BillPayment {
     id: string;
     billId: string;
-    userId: string;
+    householdId: string;
     amount: number;
     currency: Currency;
     monthYear: string; // Format: "2024-01"
@@ -54,27 +54,29 @@ export function getMonthName(monthYear: string): string {
 
 // Bills CRUD Operations
 export async function createBill(
-    userId: string,
-    bill: Omit<RecurringBill, 'id' | 'userId' | 'createdAt'>
+    householdId: string,
+    ownerId: string,
+    bill: Omit<RecurringBill, 'id' | 'householdId' | 'ownerId' | 'createdAt'>
 ): Promise<string> {
     const docRef = await addDoc(collection(db, 'recurringBills'), {
         ...bill,
-        userId,
+        householdId,
+        ownerId,
         createdAt: Timestamp.now()
     });
 
     // Auto-create payment record for current month
     const monthYear = getCurrentMonthYear();
-    await createBillPayment(docRef.id, userId, bill.amount, bill.currency, monthYear);
+    await createBillPayment(docRef.id, householdId, bill.amount, bill.currency, monthYear);
 
     return docRef.id;
 }
 
-export async function getBills(userId: string): Promise<RecurringBill[]> {
+export async function getBills(householdId: string): Promise<RecurringBill[]> {
     try {
         const q = query(
             collection(db, 'recurringBills'),
-            where('userId', '==', userId),
+            where('householdId', '==', householdId),
             where('isActive', '==', true),
             orderBy('dayOfMonth', 'asc')
         );
@@ -88,7 +90,7 @@ export async function getBills(userId: string): Promise<RecurringBill[]> {
         console.warn('Index not ready, using fallback query:', error);
         const q = query(
             collection(db, 'recurringBills'),
-            where('userId', '==', userId)
+            where('householdId', '==', householdId)
         );
         const snapshot = await getDocs(q);
         const all = snapshot.docs.map(doc => ({
@@ -113,7 +115,7 @@ export async function deleteBill(billId: string): Promise<void> {
 // Bill Payments Operations
 export async function createBillPayment(
     billId: string,
-    userId: string,
+    householdId: string,
     amount: number,
     currency: Currency,
     monthYear: string
@@ -121,7 +123,7 @@ export async function createBillPayment(
     const paymentId = `${billId}_${monthYear}`;
     await setDoc(doc(db, 'billPayments', paymentId), {
         billId,
-        userId,
+        householdId,
         amount,
         currency,
         monthYear,
@@ -130,10 +132,10 @@ export async function createBillPayment(
     });
 }
 
-export async function getBillPaymentsForMonth(userId: string, monthYear: string): Promise<BillPayment[]> {
+export async function getBillPaymentsForMonth(householdId: string, monthYear: string): Promise<BillPayment[]> {
     const q = query(
         collection(db, 'billPayments'),
-        where('userId', '==', userId),
+        where('householdId', '==', householdId),
         where('monthYear', '==', monthYear)
     );
 
@@ -152,15 +154,15 @@ export async function markBillPaid(paymentId: string, isPaid: boolean): Promise<
 }
 
 // Ensure payments exist for current month (call on dashboard load)
-export async function ensureMonthlyPayments(userId: string): Promise<void> {
+export async function ensureMonthlyPayments(householdId: string): Promise<void> {
     const monthYear = getCurrentMonthYear();
-    const bills = await getBills(userId);
-    const existingPayments = await getBillPaymentsForMonth(userId, monthYear);
+    const bills = await getBills(householdId);
+    const existingPayments = await getBillPaymentsForMonth(householdId, monthYear);
     const existingBillIds = new Set(existingPayments.map(p => p.billId));
 
     for (const bill of bills) {
         if (!existingBillIds.has(bill.id)) {
-            await createBillPayment(bill.id, userId, bill.amount, bill.currency, monthYear);
+            await createBillPayment(bill.id, householdId, bill.amount, bill.currency, monthYear);
         }
     }
 }
@@ -172,11 +174,11 @@ export interface BillWithStatus extends RecurringBill {
     paidAt: Timestamp | null;
 }
 
-export async function getBillsWithStatus(userId: string, monthYear: string): Promise<BillWithStatus[]> {
-    await ensureMonthlyPayments(userId);
+export async function getBillsWithStatus(householdId: string, monthYear: string): Promise<BillWithStatus[]> {
+    await ensureMonthlyPayments(householdId);
 
-    const bills = await getBills(userId);
-    const payments = await getBillPaymentsForMonth(userId, monthYear);
+    const bills = await getBills(householdId);
+    const payments = await getBillPaymentsForMonth(householdId, monthYear);
     const paymentMap = new Map(payments.map(p => [p.billId, p]));
 
     return bills.map(bill => {

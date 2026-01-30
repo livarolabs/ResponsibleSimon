@@ -10,7 +10,7 @@ export default function ProtectedLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { user, loading } = useAuth();
+    const { user, loading, profileLoading, needsOnboarding } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -19,7 +19,13 @@ export default function ProtectedLayout({
         }
     }, [user, loading, router]);
 
-    if (loading) {
+    useEffect(() => {
+        if (!loading && !profileLoading && user && needsOnboarding) {
+            router.replace('/onboarding');
+        }
+    }, [user, loading, profileLoading, needsOnboarding, router]);
+
+    if (loading || profileLoading) {
         return (
             <div style={{
                 minHeight: '100vh',
@@ -32,7 +38,7 @@ export default function ProtectedLayout({
         );
     }
 
-    if (!user) {
+    if (!user || needsOnboarding) {
         return null;
     }
 

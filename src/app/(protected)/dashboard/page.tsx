@@ -9,7 +9,7 @@ import { getWithdrawals, SavingsWithdrawal } from '@/lib/savings-service';
 import { formatAmount, Currency } from '@/lib/types';
 
 export default function DashboardPage() {
-    const { user, signOut } = useAuth();
+    const { user, userProfile, household, householdMembers, signOut } = useAuth();
     const [loading, setLoading] = useState(true);
     const [bills, setBills] = useState<BillWithStatus[]>([]);
     const [loans, setLoans] = useState<Loan[]>([]);
@@ -18,15 +18,15 @@ export default function DashboardPage() {
 
     useEffect(() => {
         loadData();
-    }, [user]);
+    }, [household]);
 
     const loadData = async () => {
-        if (!user) return;
+        if (!household) return;
         try {
             const [billsData, loansData, withdrawalsData] = await Promise.all([
-                getBillsWithStatus(user.uid, getCurrentMonthYear()),
-                getLoans(user.uid),
-                getWithdrawals(user.uid)
+                getBillsWithStatus(household.id, getCurrentMonthYear()),
+                getLoans(household.id),
+                getWithdrawals(household.id)
             ]);
             setBills(billsData);
             setLoans(loansData);
@@ -44,6 +44,12 @@ export default function DashboardPage() {
         } catch (err) {
             console.error('Error signing out:', err);
         }
+    };
+
+    // Helper to get member name by ID
+    const getMemberName = (ownerId: string): string => {
+        const member = householdMembers.find(m => m.id === ownerId);
+        return member?.displayName || 'Unknown';
     };
 
     // Calculate stats
@@ -84,8 +90,8 @@ export default function DashboardPage() {
         <div className="page">
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                    <h1 className="page-title">💰 ResponsibleSimon</h1>
-                    <p className="page-subtitle">Welcome back, {user?.displayName?.split(' ')[0] || 'friend'}!</p>
+                    <h1 className="page-title">💰 {household?.name || 'Dashboard'}</h1>
+                    <p className="page-subtitle">Welcome, {userProfile?.displayName || 'friend'}!</p>
                 </div>
                 <button
                     onClick={() => setShowLogoutConfirm(true)}
@@ -93,12 +99,12 @@ export default function DashboardPage() {
                         background: 'none',
                         border: 'none',
                         cursor: 'pointer',
-                        fontSize: '20px',
+                        fontSize: '28px',
                         padding: 'var(--space-xs)'
                     }}
                     title="Sign Out"
                 >
-                    👋
+                    {userProfile?.avatarEmoji || '👋'}
                 </button>
             </div>
 
@@ -158,13 +164,19 @@ export default function DashboardPage() {
                 </Link>
             </div>
 
-            {/* Owners Legend */}
+            {/* Household Members */}
             <div className="card" style={{ marginTop: 'var(--space-lg)', background: 'rgba(99, 102, 241, 0.1)' }}>
-                <div className="text-sm text-muted" style={{ marginBottom: 'var(--space-xs)' }}>Track who&apos;s responsible:</div>
-                <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-                    <span>👨 Simon</span>
-                    <span>👩 Reni</span>
+                <div className="text-sm text-muted" style={{ marginBottom: 'var(--space-xs)' }}>Household Members:</div>
+                <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+                    {householdMembers.map(member => (
+                        <span key={member.id}>{member.avatarEmoji} {member.displayName}</span>
+                    ))}
                 </div>
+                {household && (
+                    <div className="text-muted text-sm" style={{ marginTop: 'var(--space-sm)' }}>
+                        Invite Code: <strong>{household.inviteCode}</strong>
+                    </div>
+                )}
             </div>
 
             {/* Logout Confirmation Modal */}
@@ -173,7 +185,7 @@ export default function DashboardPage() {
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <h3 className="font-semibold" style={{ marginBottom: 'var(--space-md)' }}>Sign Out?</h3>
                         <p className="text-muted" style={{ marginBottom: 'var(--space-md)' }}>
-                            Are you sure you want to sign out of ResponsibleSimon?
+                            Are you sure you want to sign out?
                         </p>
                         <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
                             <button onClick={() => setShowLogoutConfirm(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>

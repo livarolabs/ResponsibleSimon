@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createWithdrawal } from '@/lib/savings-service';
-import { Currency, Owner, CURRENCIES, OWNERS, getCurrencySymbol } from '@/lib/types';
+import { Currency, CURRENCIES, getCurrencySymbol } from '@/lib/types';
 import FormattedNumberInput from '@/components/FormattedNumberInput';
 
 export default function AddWithdrawalPage() {
-    const { user } = useAuth();
+    const { user, household, householdMembers } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -16,26 +16,25 @@ export default function AddWithdrawalPage() {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [currency, setCurrency] = useState<Currency>('EUR');
-    const [owner, setOwner] = useState<Owner>('Simon');
+    const [ownerId, setOwnerId] = useState(user?.uid || '');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || !household) return;
 
         setLoading(true);
         setError('');
 
         try {
-            await createWithdrawal(user.uid, {
+            await createWithdrawal(household.id, ownerId || user.uid, {
                 description,
                 withdrawnAmount: parseFloat(amount),
-                currency,
-                owner
+                currency
             });
             router.push('/savings');
         } catch (err) {
             console.error('Error creating withdrawal:', err);
-            setError('Failed to add withdrawal. Please try again.');
+            setError('Failed to record withdrawal. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -47,25 +46,21 @@ export default function AddWithdrawalPage() {
                 <button onClick={() => router.back()} className="btn btn-secondary" style={{ padding: '8px 16px', marginBottom: 'var(--space-sm)' }}>
                     ← Back
                 </button>
-                <h1 className="page-title">Add Withdrawal</h1>
-            </div>
-
-            <div className="card" style={{ background: 'rgba(99, 102, 241, 0.1)', marginBottom: 'var(--space-lg)' }}>
-                <p className="text-secondary">💡 Track money you&apos;ve taken from your savings.</p>
-                <p className="text-muted">You can pay yourself back in installments over time.</p>
+                <h1 className="page-title">Record Withdrawal</h1>
+                <p className="page-subtitle">Track when you borrow from savings</p>
             </div>
 
             {error && <div className="card" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--color-error)', marginBottom: 'var(--space-md)' }}>{error}</div>}
 
             <form onSubmit={handleSubmit}>
                 <div className="form-group">
-                    <label className="form-label">What was it for?</label>
+                    <label className="form-label">What is this for?</label>
                     <input
                         type="text"
                         className="input"
                         value={description}
                         onChange={e => setDescription(e.target.value)}
-                        placeholder="e.g., Emergency expense, Vacation"
+                        placeholder="e.g., Emergency car repair"
                         required
                     />
                 </div>
@@ -98,15 +93,15 @@ export default function AddWithdrawalPage() {
                 <div className="form-group">
                     <label className="form-label">Who withdrew?</label>
                     <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                        {OWNERS.map(o => (
+                        {householdMembers.map(member => (
                             <button
-                                key={o.value}
+                                key={member.id}
                                 type="button"
-                                onClick={() => setOwner(o.value)}
-                                className={`btn ${owner === o.value ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setOwnerId(member.id)}
+                                className={`btn ${ownerId === member.id ? 'btn-primary' : 'btn-secondary'}`}
                                 style={{ flex: 1 }}
                             >
-                                {o.emoji} {o.label}
+                                {member.avatarEmoji} {member.displayName}
                             </button>
                         ))}
                     </div>
@@ -118,7 +113,7 @@ export default function AddWithdrawalPage() {
                     disabled={loading}
                     style={{ marginTop: 'var(--space-lg)' }}
                 >
-                    {loading ? 'Adding...' : 'Add Withdrawal'}
+                    {loading ? 'Recording...' : 'Record Withdrawal'}
                 </button>
             </form>
         </div>
