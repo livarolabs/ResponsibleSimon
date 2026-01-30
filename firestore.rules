@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Recurring Bills
+    match /recurringBills/{billId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Bill Payments
+    match /billPayments/{paymentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Loans
+    match /loans/{loanId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Loan Payments
+    match /loanPayments/{paymentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Savings Withdrawals
+    match /savingsWithdrawals/{withdrawalId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Savings Paybacks
+    match /savingsPaybacks/{paybackId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+  }
+}
