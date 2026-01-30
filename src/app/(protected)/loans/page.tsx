@@ -116,6 +116,26 @@ export default function LoansPage() {
                                     )}
                                 </div>
                                 <div className="text-muted text-sm">{loan.lender}</div>
+
+                                {/* Installment & Payoff Info */}
+                                {loan.monthlyInstallment && loan.monthlyInstallment > 0 && loan.remainingAmount > 0 && (
+                                    <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-sm)' }}>
+                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                                            Monthly: <span style={{ color: 'var(--color-text)' }}>{formatAmount(loan.monthlyInstallment, loan.currency)}</span>
+                                        </div>
+                                        {(() => {
+                                            const monthsLeft = Math.ceil(loan.remainingAmount / loan.monthlyInstallment);
+                                            const payoffDate = new Date();
+                                            payoffDate.setMonth(payoffDate.getMonth() + monthsLeft);
+                                            return (
+                                                <div style={{ fontSize: '12px', color: 'var(--color-success)', marginTop: '2px' }}>
+                                                    Payoff estimate: {payoffDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                                                    <span style={{ opacity: 0.7 }}> ({monthsLeft} months)</span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
                             </div>
                             <div style={{ textAlign: 'right' }}>
                                 <div className="font-semibold">{formatAmount(loan.remainingAmount, loan.currency)}</div>

@@ -19,6 +19,7 @@ export default function AddLoanPage() {
     const [currency, setCurrency] = useState<Currency>('EUR');
     const [ownerId, setOwnerId] = useState(user?.uid || '');
     const [interestRate, setInterestRate] = useState('0');
+    const [monthlyInstallment, setMonthlyInstallment] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,7 +35,8 @@ export default function AddLoanPage() {
                 originalAmount: parseFloat(amount),
                 remainingAmount: parseFloat(amount),
                 currency,
-                interestRate: parseFloat(interestRate)
+                interestRate: parseFloat(interestRate),
+                monthlyInstallment: monthlyInstallment ? parseFloat(monthlyInstallment) : 0
             });
             router.push('/loans');
         } catch (err) {
@@ -123,17 +125,27 @@ export default function AddLoanPage() {
                     </div>
                 </div>
 
-                <div className="form-group">
-                    <label className="form-label">Interest Rate (%)</label>
-                    <input
-                        type="number"
-                        className="input"
-                        value={interestRate}
-                        onChange={e => setInterestRate(e.target.value)}
-                        placeholder="0"
-                        step="0.1"
-                        min="0"
-                    />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+                    <div className="form-group">
+                        <label className="form-label">Interest Rate (%)</label>
+                        <input
+                            type="number"
+                            className="input"
+                            value={interestRate}
+                            onChange={e => setInterestRate(e.target.value)}
+                            placeholder="0"
+                            step="0.1"
+                            min="0"
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Monthly Installment</label>
+                        <FormattedNumberInput
+                            value={monthlyInstallment}
+                            onChange={setMonthlyInstallment}
+                            placeholder="Optional"
+                        />
+                    </div>
                 </div>
 
                 <button

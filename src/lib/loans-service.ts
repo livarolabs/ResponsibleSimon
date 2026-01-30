@@ -24,6 +24,7 @@ export interface Loan {
     remainingAmount: number;
     currency: Currency;
     interestRate: number;
+    monthlyInstallment?: number;
     createdAt: Timestamp;
 }
 
