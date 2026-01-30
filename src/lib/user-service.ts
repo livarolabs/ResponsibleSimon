@@ -96,8 +96,26 @@ export async function searchUserByEmail(email: string): Promise<UserProfile | nu
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
-    const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() } as UserProfile;
+    const docRef = snapshot.docs[0];
+    return { id: docRef.id, ...docRef.data() } as UserProfile;
+}
+
+// Search for users by email prefix for autocomplete suggestions
+export async function searchUsersByEmailPrefix(emailPrefix: string, limit = 5): Promise<UserProfile[]> {
+    if (!emailPrefix || emailPrefix.length < 2) return [];
+
+    const prefix = emailPrefix.toLowerCase().trim();
+    // Firestore range query for prefix matching
+    const q = query(
+        collection(db, 'userProfiles'),
+        where('email', '>=', prefix),
+        where('email', '<=', prefix + '\uf8ff')
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+        .slice(0, limit)
+        .map(doc => ({ id: doc.id, ...doc.data() }) as UserProfile);
 }
 
 // Create a new household and add the user to it
