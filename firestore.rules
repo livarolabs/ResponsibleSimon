@@ -20,6 +20,13 @@ service cloud.firestore {
       allow update: if isAuthenticated();
     }
     
+    // Household Invites - users can read/write their own invites
+    match /householdInvites/{inviteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
+    }
+    
     // Recurring Bills - household members can access
     match /recurringBills/{billId} {
       allow read: if isAuthenticated();

@@ -3,6 +3,7 @@ import {
     getDoc,
     setDoc,
     updateDoc,
+    deleteDoc,
     collection,
     query,
     where,
@@ -13,6 +14,7 @@ import { db } from './firebase';
 
 export interface UserProfile {
     id: string;
+    email?: string;
     displayName: string;
     avatarEmoji: string;
     householdId: string | null;
@@ -24,6 +26,18 @@ export interface Household {
     name: string;
     members: string[];
     inviteCode: string;
+    createdAt: Timestamp;
+}
+
+export interface HouseholdInvite {
+    id: string;
+    householdId: string;
+    householdName: string;
+    fromUserId: string;
+    fromUserName: string;
+    fromUserAvatar: string;
+    toUserId: string;
+    status: 'pending' | 'accepted' | 'declined';
     createdAt: Timestamp;
 }
 
@@ -41,10 +55,12 @@ function generateInviteCode(): string {
 export async function createUserProfile(
     userId: string,
     displayName: string,
-    avatarEmoji: string
+    avatarEmoji: string,
+    email?: string
 ): Promise<UserProfile> {
     const profile: UserProfile = {
         id: userId,
+        email: email || undefined,
         displayName,
         avatarEmoji,
         householdId: null,
@@ -67,9 +83,21 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 // Update user profile
 export async function updateUserProfile(
     userId: string,
-    updates: Partial<Pick<UserProfile, 'displayName' | 'avatarEmoji'>>
+    updates: Partial<Pick<UserProfile, 'displayName' | 'avatarEmoji' | 'email'>>
 ): Promise<void> {
     await updateDoc(doc(db, 'userProfiles', userId), updates);
+}
+
+// Search for a user by exact email match
+export async function searchUserByEmail(email: string): Promise<UserProfile | null> {
+    const q = query(
+        collection(db, 'userProfiles'),
+        where('email', '==', email.toLowerCase().trim())
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() } as UserProfile;
 }
 
 // Create a new household and add the user to it
@@ -129,6 +157,72 @@ export async function joinHousehold(userId: string, inviteCode: string): Promise
     return household;
 }
 
+// Send a household invite to another user
+export async function sendHouseholdInvite(
+    fromUser: UserProfile,
+    household: Household,
+    toUserId: string
+): Promise<HouseholdInvite> {
+    const inviteRef = doc(collection(db, 'householdInvites'));
+
+    const invite: HouseholdInvite = {
+        id: inviteRef.id,
+        householdId: household.id,
+        householdName: household.name,
+        fromUserId: fromUser.id,
+        fromUserName: fromUser.displayName,
+        fromUserAvatar: fromUser.avatarEmoji,
+        toUserId,
+        status: 'pending',
+        createdAt: Timestamp.now()
+    };
+
+    await setDoc(inviteRef, invite);
+    return invite;
+}
+
+// Get pending invites for a user
+export async function getPendingInvites(userId: string): Promise<HouseholdInvite[]> {
+    const q = query(
+        collection(db, 'householdInvites'),
+        where('toUserId', '==', userId),
+        where('status', '==', 'pending')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as HouseholdInvite);
+}
+
+// Accept a household invite
+export async function acceptInvite(invite: HouseholdInvite): Promise<void> {
+    // Update invite status
+    await updateDoc(doc(db, 'householdInvites', invite.id), {
+        status: 'accepted'
+    });
+
+    // Get the household
+    const household = await getHousehold(invite.householdId);
+    if (!household) throw new Error('Household not found');
+
+    // Add user to household members
+    if (!household.members.includes(invite.toUserId)) {
+        await updateDoc(doc(db, 'households', household.id), {
+            members: [...household.members, invite.toUserId]
+        });
+    }
+
+    // Update user profile with household ID
+    await updateDoc(doc(db, 'userProfiles', invite.toUserId), {
+        householdId: household.id
+    });
+}
+
+// Decline a household invite
+export async function declineInvite(inviteId: string): Promise<void> {
+    await updateDoc(doc(db, 'householdInvites', inviteId), {
+        status: 'declined'
+    });
+}
+
 // Get household by ID
 export async function getHousehold(householdId: string): Promise<Household | null> {
     const docSnap = await getDoc(doc(db, 'households', householdId));
@@ -161,4 +255,13 @@ export async function regenerateInviteCode(householdId: string): Promise<string>
         inviteCode: newCode
     });
     return newCode;
+}
+
+// Generate invite link
+export function getInviteLink(inviteCode: string): string {
+    // Use window.location.origin if available, otherwise a placeholder
+    const baseUrl = typeof window !== 'undefined'
+        ? window.location.origin
+        : 'https://yourapp.com';
+    return `${baseUrl}/join/${inviteCode}`;
 }

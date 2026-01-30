@@ -1,9 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUserProfile, regenerateInviteCode } from '@/lib/user-service';
+import {
+    updateUserProfile,
+    regenerateInviteCode,
+    searchUserByEmail,
+    sendHouseholdInvite,
+    getPendingInvites,
+    acceptInvite,
+    declineInvite,
+    getInviteLink,
+    UserProfile,
+    HouseholdInvite
+} from '@/lib/user-service';
 import { AVATAR_OPTIONS } from '@/lib/types';
 
 export default function SettingsPage() {
@@ -13,7 +24,30 @@ export default function SettingsPage() {
     const [editMode, setEditMode] = useState(false);
     const [displayName, setDisplayName] = useState(userProfile?.displayName || '');
     const [avatarEmoji, setAvatarEmoji] = useState(userProfile?.avatarEmoji || '👨');
-    const [copied, setCopied] = useState(false);
+    const [linkCopied, setLinkCopied] = useState(false);
+
+    // Invite modal state
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [searchEmail, setSearchEmail] = useState('');
+    const [searchResult, setSearchResult] = useState<UserProfile | null>(null);
+    const [searching, setSearching] = useState(false);
+    const [searchError, setSearchError] = useState('');
+    const [inviteSent, setInviteSent] = useState(false);
+
+    // Pending invites for current user
+    const [pendingInvites, setPendingInvites] = useState<HouseholdInvite[]>([]);
+
+    useEffect(() => {
+        if (user) {
+            loadPendingInvites();
+        }
+    }, [user]);
+
+    const loadPendingInvites = async () => {
+        if (!user) return;
+        const invites = await getPendingInvites(user.uid);
+        setPendingInvites(invites);
+    };
 
     const handleSave = async () => {
         if (!user) return;
@@ -29,11 +63,80 @@ export default function SettingsPage() {
         }
     };
 
-    const handleCopyCode = () => {
+    const handleCopyLink = () => {
         if (household?.inviteCode) {
-            navigator.clipboard.writeText(household.inviteCode);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            const link = getInviteLink(household.inviteCode);
+            navigator.clipboard.writeText(link);
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+        }
+    };
+
+    const handleSearchUser = async () => {
+        if (!searchEmail.trim()) return;
+
+        setSearching(true);
+        setSearchError('');
+        setSearchResult(null);
+        setInviteSent(false);
+
+        try {
+            const result = await searchUserByEmail(searchEmail);
+            if (result) {
+                if (result.id === user?.uid) {
+                    setSearchError("That's you!");
+                } else if (household?.members.includes(result.id)) {
+                    setSearchError("This person is already in your household");
+                } else {
+                    setSearchResult(result);
+                }
+            } else {
+                setSearchError('No user found with this email');
+            }
+        } catch (err) {
+            console.error('Error searching:', err);
+            setSearchError('Error searching. Please try again.');
+        } finally {
+            setSearching(false);
+        }
+    };
+
+    const handleSendInvite = async () => {
+        if (!searchResult || !userProfile || !household) return;
+
+        setLoading(true);
+        try {
+            await sendHouseholdInvite(userProfile, household, searchResult.id);
+            setInviteSent(true);
+            setSearchResult(null);
+            setSearchEmail('');
+        } catch (err) {
+            console.error('Error sending invite:', err);
+            setSearchError('Failed to send invite');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAcceptInvite = async (invite: HouseholdInvite) => {
+        setLoading(true);
+        try {
+            await acceptInvite(invite);
+            await refreshProfile();
+            await loadPendingInvites();
+        } catch (err) {
+            console.error('Error accepting invite:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeclineInvite = async (inviteId: string) => {
+        try {
+            await declineInvite(inviteId);
+            await loadPendingInvites();
+        } catch (err) {
+            console.error('Error declining invite:', err);
         }
     };
 
@@ -66,6 +169,29 @@ export default function SettingsPage() {
                 <h1 className="page-title">⚙️ Settings</h1>
                 <p className="page-subtitle">Manage your profile and household</p>
             </div>
+
+            {/* Pending Invites */}
+            {pendingInvites.length > 0 && (
+                <div className="card" style={{ marginBottom: 'var(--space-md)', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid var(--color-primary)' }}>
+                    <h3 className="font-semibold" style={{ marginBottom: 'var(--space-sm)' }}>📨 Pending Invites</h3>
+                    {pendingInvites.map(invite => (
+                        <div key={invite.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-sm) 0' }}>
+                            <div>
+                                <span style={{ fontSize: '20px' }}>{invite.fromUserAvatar}</span>
+                                <span style={{ marginLeft: 'var(--space-sm)' }}><strong>{invite.fromUserName}</strong> invited you to <strong>{invite.householdName}</strong></span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                                <button onClick={() => handleAcceptInvite(invite)} className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 'var(--font-size-sm)' }}>
+                                    Accept
+                                </button>
+                                <button onClick={() => handleDeclineInvite(invite.id)} className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: 'var(--font-size-sm)' }}>
+                                    Decline
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Profile Section */}
             <div className="card" style={{ marginBottom: 'var(--space-md)' }}>
@@ -146,7 +272,7 @@ export default function SettingsPage() {
 
                 <div style={{ marginBottom: 'var(--space-md)' }}>
                     <div className="text-muted text-sm">Members</div>
-                    <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-xs)' }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-xs)', flexWrap: 'wrap' }}>
                         {householdMembers.map(member => (
                             <div key={member.id} style={{ textAlign: 'center' }}>
                                 <div style={{ fontSize: '32px' }}>{member.avatarEmoji}</div>
@@ -156,39 +282,32 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div>
-                    <div className="text-muted text-sm">Invite Code</div>
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-sm)',
-                        marginTop: 'var(--space-xs)'
-                    }}>
-                        <code style={{
-                            fontSize: '24px',
-                            letterSpacing: '4px',
-                            padding: 'var(--space-sm) var(--space-md)',
-                            background: 'var(--color-surface)',
-                            borderRadius: 'var(--radius-md)'
-                        }}>
-                            {household?.inviteCode}
-                        </code>
-                        <button onClick={handleCopyCode} className="btn btn-secondary" style={{ padding: '8px 12px' }}>
-                            {copied ? '✓ Copied' : '📋 Copy'}
-                        </button>
-                    </div>
-                    <p className="text-muted text-sm" style={{ marginTop: 'var(--space-xs)' }}>
-                        Share this code to invite others to your household
-                    </p>
+                {/* Invite Actions */}
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
                     <button
-                        onClick={handleRegenerateCode}
-                        className="text-muted text-sm"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', marginTop: 'var(--space-sm)' }}
-                        disabled={loading}
+                        onClick={() => setShowInviteModal(true)}
+                        className="btn btn-primary"
+                        style={{ flex: 1 }}
                     >
-                        Generate new code
+                        👤 Add Member
+                    </button>
+                    <button
+                        onClick={handleCopyLink}
+                        className="btn btn-secondary"
+                        style={{ flex: 1 }}
+                    >
+                        {linkCopied ? '✓ Link Copied!' : '🔗 Share Link'}
                     </button>
                 </div>
+
+                <button
+                    onClick={handleRegenerateCode}
+                    className="text-muted text-sm"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', marginTop: 'var(--space-md)', display: 'block' }}
+                    disabled={loading}
+                >
+                    Generate new invite code
+                </button>
             </div>
 
             {/* Sign Out */}
@@ -203,6 +322,81 @@ export default function SettingsPage() {
             >
                 Sign Out
             </button>
+
+            {/* Add Member Modal */}
+            {showInviteModal && (
+                <div className="modal-overlay" onClick={() => setShowInviteModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <h3 className="font-semibold" style={{ marginBottom: 'var(--space-md)' }}>Add Member</h3>
+
+                        {inviteSent && (
+                            <div className="card" style={{ background: 'rgba(34, 197, 94, 0.1)', marginBottom: 'var(--space-md)' }}>
+                                ✓ Invite sent! They&apos;ll see it in their Settings.
+                            </div>
+                        )}
+
+                        <div className="form-group">
+                            <label className="form-label">Search by Email</label>
+                            <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                <input
+                                    type="email"
+                                    className="input"
+                                    value={searchEmail}
+                                    onChange={e => setSearchEmail(e.target.value)}
+                                    placeholder="partner@email.com"
+                                    onKeyDown={e => e.key === 'Enter' && handleSearchUser()}
+                                    style={{ flex: 1 }}
+                                />
+                                <button
+                                    onClick={handleSearchUser}
+                                    className="btn btn-primary"
+                                    disabled={searching || !searchEmail.trim()}
+                                >
+                                    {searching ? '...' : 'Search'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {searchError && (
+                            <p className="text-muted text-sm" style={{ color: 'var(--color-error)', marginBottom: 'var(--space-md)' }}>
+                                {searchError}
+                            </p>
+                        )}
+
+                        {searchResult && (
+                            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-md)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                    <span style={{ fontSize: '32px' }}>{searchResult.avatarEmoji}</span>
+                                    <div>
+                                        <div className="font-semibold">{searchResult.displayName}</div>
+                                        <div className="text-muted text-sm">Found!</div>
+                                    </div>
+                                </div>
+                                <button onClick={handleSendInvite} className="btn btn-primary" disabled={loading}>
+                                    {loading ? '...' : 'Invite'}
+                                </button>
+                            </div>
+                        )}
+
+                        <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+                            <p className="text-muted text-sm" style={{ marginBottom: 'var(--space-sm)' }}>
+                                Or share this link in messenger:
+                            </p>
+                            <button onClick={handleCopyLink} className="btn btn-secondary btn-full">
+                                {linkCopied ? '✓ Copied!' : '📋 Copy Invite Link'}
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => setShowInviteModal(false)}
+                            className="btn btn-secondary btn-full"
+                            style={{ marginTop: 'var(--space-md)' }}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

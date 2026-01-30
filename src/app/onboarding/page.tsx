@@ -47,7 +47,7 @@ export default function OnboardingPage() {
         setError('');
 
         try {
-            await createUserProfile(user.uid, displayName, avatarEmoji);
+            await createUserProfile(user.uid, displayName, avatarEmoji, user.email || undefined);
             setStep('household');
         } catch (err) {
             console.error('Error creating profile:', err);
