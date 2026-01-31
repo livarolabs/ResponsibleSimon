@@ -172,3 +172,25 @@ export function getPaybackProgress(withdrawal: SavingsWithdrawal): number {
     if (withdrawal.withdrawnAmount === 0) return 100;
     return Math.round((withdrawal.paidBackAmount / withdrawal.withdrawnAmount) * 100);
 }
+
+// Savings Account Operations
+export interface Saving {
+    id: string;
+    householdId: string;
+    name: string;
+    amount: number;
+    currency: Currency;
+    goalAmount?: number;
+}
+
+export async function getSavings(householdId: string): Promise<Saving[]> {
+    const q = query(
+        collection(db, 'savings'),
+        where('householdId', '==', householdId)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    } as Saving));
+}

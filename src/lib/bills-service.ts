@@ -167,27 +167,69 @@ export async function ensureMonthlyPayments(householdId: string): Promise<void> 
     }
 }
 
+import {
+    getLoans,
+    getLoanPaymentsForMonth,
+    Loan
+} from './loans-service';
+
+// ... (existing helper functions)
+
 // Get bills with payment status for current month
-export interface BillWithStatus extends RecurringBill {
+export interface BillWithStatus extends Omit<RecurringBill, 'createdAt'> {
+    type: 'bill' | 'loan';
     paymentId: string;
     isPaid: boolean;
     paidAt: Timestamp | null;
+    createdAt?: Timestamp; // Optional because merging loans
 }
 
 export async function getBillsWithStatus(householdId: string, monthYear: string): Promise<BillWithStatus[]> {
     await ensureMonthlyPayments(householdId);
 
+    // 1. Fetch Recurring Bills
     const bills = await getBills(householdId);
-    const payments = await getBillPaymentsForMonth(householdId, monthYear);
-    const paymentMap = new Map(payments.map(p => [p.billId, p]));
+    const billPayments = await getBillPaymentsForMonth(householdId, monthYear);
+    const billPaymentMap = new Map(billPayments.map(p => [p.billId, p]));
 
-    return bills.map(bill => {
-        const payment = paymentMap.get(bill.id);
+    const mappedBills: BillWithStatus[] = bills.map(bill => {
+        const payment = billPaymentMap.get(bill.id);
         return {
             ...bill,
+            type: 'bill',
             paymentId: payment?.id || `${bill.id}_${monthYear}`,
             isPaid: payment?.isPaid || false,
             paidAt: payment?.paidAt || null
         };
     });
+
+    // 2. Fetch Active Loans with Monthly Installments
+    const loans = await getLoans(householdId);
+    const loanPayments = await getLoanPaymentsForMonth(householdId, monthYear);
+    const loanPaymentMap = new Map(loanPayments.map(p => [p.loanId, p]));
+
+    const mappedLoans: BillWithStatus[] = loans
+        .filter(l => (l.monthlyInstallment || 0) > 0)
+        .map(loan => {
+            const payment = loanPaymentMap.get(loan.id);
+            return {
+                id: loan.id,
+                householdId: loan.householdId,
+                ownerId: loan.ownerId,
+                name: `${loan.name} (Installment)`,
+                amount: loan.monthlyInstallment || 0,
+                currency: loan.currency,
+                category: 'Loan',
+                dayOfMonth: loan.paymentDay || 1, // Default to 1st if not set
+                isActive: true,
+                type: 'loan',
+                paymentId: payment?.id || `loan_${loan.id}_${monthYear}`, // Placeholder, real ID created on payment
+                isPaid: !!payment,
+                paidAt: payment?.paidAt || null
+            };
+        });
+
+    // 3. Merge and Sort
+    return [...mappedBills, ...mappedLoans]
+        .sort((a, b) => a.dayOfMonth - b.dayOfMonth);
 }

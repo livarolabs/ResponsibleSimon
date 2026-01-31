@@ -1,202 +1,231 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBillsWithStatus, getCurrentMonthYear, BillWithStatus } from '@/lib/bills-service';
-import { getLoans, Loan } from '@/lib/loans-service';
-import { getWithdrawals, SavingsWithdrawal } from '@/lib/savings-service';
-import { formatAmount, Currency } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import { getBillsWithStatus, BillWithStatus } from '@/lib/bills-service';
+import { getLoans } from '@/lib/loans-service';
+import { getSavings } from '@/lib/savings-service';
+import { Loan } from '@/lib/loans-service';
+import { formatAmount } from '@/lib/types';
+import Link from 'next/link';
+import { getCurrentMonthYear } from '@/lib/bills-service';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Receipt, CreditCard, PiggyBank, Settings, ArrowRight, Wallet } from 'lucide-react';
 
 export default function DashboardPage() {
-    const { user, userProfile, household, householdMembers, signOut } = useAuth();
+    const { user, household } = useAuth();
     const [loading, setLoading] = useState(true);
     const [bills, setBills] = useState<BillWithStatus[]>([]);
     const [loans, setLoans] = useState<Loan[]>([]);
-    const [withdrawals, setWithdrawals] = useState<SavingsWithdrawal[]>([]);
-    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [savingsTotal, setSavingsTotal] = useState(0);
 
     useEffect(() => {
+        async function loadData() {
+            if (!household) return;
+            try {
+                // Bills
+                const monthYear = getCurrentMonthYear();
+                const billsData = await getBillsWithStatus(household.id, monthYear);
+                setBills(billsData);
+
+                // Loans
+                const loansData = await getLoans(household.id);
+                setLoans(loansData);
+
+                // Savings
+                const savingsData = await getSavings(household.id);
+                const totalSaved = savingsData.reduce((acc, s) => acc + s.amount, 0);
+                setSavingsTotal(totalSaved);
+
+            } catch (err) {
+                console.error("Error loading dashboard data", err);
+            } finally {
+                setLoading(false);
+            }
+        }
         loadData();
     }, [household]);
 
-    const loadData = async () => {
-        if (!household) return;
-        try {
-            const [billsData, loansData, withdrawalsData] = await Promise.all([
-                getBillsWithStatus(household.id, getCurrentMonthYear()),
-                getLoans(household.id),
-                getWithdrawals(household.id)
-            ]);
-            setBills(billsData);
-            setLoans(loansData);
-            setWithdrawals(withdrawalsData);
-        } catch (err) {
-            console.error('Error loading data:', err);
-        } finally {
-            setLoading(false);
-        }
+    const calculateNetWorth = () => {
+        let billsDue = 0;
+        bills.filter(b => !b.isPaid).forEach(b => {
+            if (b.currency === 'EUR') billsDue += b.amount;
+        });
+
+        let loansRemaining = 0;
+        loans.forEach(l => {
+            if (l.currency === 'EUR') loansRemaining += l.remainingAmount;
+        });
+
+        return savingsTotal - (billsDue + loansRemaining);
     };
 
-    const handleLogout = async () => {
-        try {
-            await signOut();
-        } catch (err) {
-            console.error('Error signing out:', err);
-        }
-    };
-
-    // Helper to get member name by ID
-    const getMemberName = (ownerId: string): string => {
-        const member = householdMembers.find(m => m.id === ownerId);
-        return member?.displayName || 'Unknown';
-    };
-
-    // Calculate stats
-    const unpaidBills = bills.filter(b => !b.isPaid);
-    const billTotals = unpaidBills.reduce((acc, b) => {
-        acc[b.currency] = (acc[b.currency] || 0) + b.amount;
-        return acc;
-    }, {} as Record<Currency, number>);
-
-    const loanTotals = loans.reduce((acc, l) => {
-        acc[l.currency] = (acc[l.currency] || 0) + l.remainingAmount;
-        return acc;
-    }, {} as Record<Currency, number>);
-
-    const savingsTotals = withdrawals.reduce((acc, w) => {
-        const owed = w.withdrawnAmount - w.paidBackAmount;
-        acc[w.currency] = (acc[w.currency] || 0) + owed;
-        return acc;
-    }, {} as Record<Currency, number>);
-
-    const renderTotals = (totals: Record<Currency, number>) => {
-        const order: Currency[] = ['EUR', 'HUF', 'PLN'];
-        const entries = order
-            .map(c => ({ currency: c, value: totals[c] || 0 }))
-            .filter(e => e.value > 0);
-
-        if (entries.length === 0) return '€0.00';
-
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {entries.map(e => (
-                    <div key={e.currency} style={{ lineHeight: '1.1' }}>
-                        {formatAmount(e.value, e.currency)}
-                    </div>
-                ))}
-            </div>
-        );
-    };
+    const netWorth = calculateNetWorth();
 
     if (loading) {
         return (
-            <div className="page">
-                <div className="skeleton" style={{ height: 100, marginBottom: 'var(--space-md)' }}></div>
-                <div className="skeleton" style={{ height: 100, marginBottom: 'var(--space-md)' }}></div>
-                <div className="skeleton" style={{ height: 100 }}></div>
+            <div className="container max-w-md mx-auto p-6 space-y-8 flex flex-col items-center justify-center min-h-screen">
+                <Skeleton className="w-24 h-24 rounded-full" />
+                <div className="space-y-4 w-full">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-32 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="page" style={{ height: '100dvh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden', paddingBottom: 0 }}>
+        <div className="container max-w-md mx-auto p-6 pb-24 space-y-8">
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-md)', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                    <span style={{ fontSize: '24px' }}>💰</span>
-                    <div>
-                        <h1 style={{ fontSize: '18px', fontWeight: 700, lineHeight: 1 }}>{household?.name || 'Dashboard'}</h1>
-                        <p className="text-secondary" style={{ fontSize: '12px', marginTop: '2px' }}>Welcome, {userProfile?.displayName}!</p>
-                    </div>
+            <header className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Hi, {user?.displayName?.split(' ')[0] || 'User'}</h1>
+                    <p className="text-muted-foreground text-sm">Welcome back</p>
                 </div>
-                <button
-                    onClick={() => setShowLogoutConfirm(true)}
-                    style={{ fontSize: '24px', padding: '4px', cursor: 'pointer' }}
-                >
-                    {userProfile?.avatarEmoji || '👋'}
-                </button>
+                <Avatar className="h-12 w-12 border-2 border-border">
+                    <AvatarImage src={user?.photoURL || ''} />
+                    <AvatarFallback>
+                        {user?.displayName?.charAt(0) || 'U'}
+                    </AvatarFallback>
+                </Avatar>
+            </header>
+
+            {/* Net Worth Hero */}
+            <Card className="bg-gradient-to-br from-indigo-600 to-violet-700 border-none text-white shadow-xl">
+                <CardContent className="flex flex-col items-center py-8">
+                    <span className="text-indigo-100 text-xs font-semibold uppercase tracking-widest mb-2">Net Position (Est.)</span>
+                    <span className={`text-4xl font-bold tracking-tighter ${netWorth >= 0 ? 'text-white' : 'text-white'}`}>
+                        {formatAmount(netWorth, 'EUR')}
+                    </span>
+                    <div className="mt-4 flex gap-2">
+                        <div className="bg-white/10 px-3 py-1 rounded-full text-xs backdrop-blur-md">
+                            {formatAmount(savingsTotal, 'EUR')} Assets
+                        </div>
+                        <div className="bg-white/10 px-3 py-1 rounded-full text-xs backdrop-blur-md">
+                            {formatAmount(Math.abs(netWorth - savingsTotal), 'EUR')} Liab.
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Quick Actions */}
+            <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pl-1">Quick Actions</h3>
+                <ScrollArea className="w-full whitespace-nowrap rounded-md">
+                    <div className="flex w-max space-x-4 p-1">
+                        <Link href="/bills/add">
+                            <Button variant="outline" className="flex flex-col h-24 w-24 gap-2 rounded-xl border-dashed border-2 hover:border-indigo-500 hover:bg-indigo-500/5 hover:text-indigo-500">
+                                <Receipt className="h-6 w-6" />
+                                <span className="text-xs">Add Bill</span>
+                            </Button>
+                        </Link>
+                        <Link href="/loans/add">
+                            <Button variant="outline" className="flex flex-col h-24 w-24 gap-2 rounded-xl border-dashed border-2 hover:border-rose-500 hover:bg-rose-500/5 hover:text-rose-500">
+                                <CreditCard className="h-6 w-6" />
+                                <span className="text-xs">Add Loan</span>
+                            </Button>
+                        </Link>
+                        <Link href="/savings/add">
+                            <Button variant="outline" className="flex flex-col h-24 w-24 gap-2 rounded-xl border-dashed border-2 hover:border-emerald-500 hover:bg-emerald-500/5 hover:text-emerald-500">
+                                <PiggyBank className="h-6 w-6" />
+                                <span className="text-xs">Add Savings</span>
+                            </Button>
+                        </Link>
+                        <Link href="/settings">
+                            <Button variant="outline" className="flex flex-col h-24 w-24 gap-2 rounded-xl border-dashed border-2 hover:border-border hover:bg-muted">
+                                <Settings className="h-6 w-6" />
+                                <span className="text-xs">Settings</span>
+                            </Button>
+                        </Link>
+                    </div>
+                    <ScrollBar orientation="horizontal" />
+                </ScrollArea>
             </div>
 
-            {/* Main Content - Flex Grow to fill space */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', minHeight: 0, paddingBottom: 'calc(72px + var(--space-lg) + var(--space-md))' }}>
+            {/* Overview Section */}
+            <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pl-1">Overview</h3>
 
-                {/* Stats Cards - Share space equally */}
-                <Link href="/bills" style={{ flex: 1, minHeight: 0 }}>
-                    <div className="card" style={{ height: '100%', padding: 'var(--space-md)', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'auto' }}>
-                            <div className="text-muted text-sm">Bills Due</div>
-                            <span style={{ fontSize: '20px', color: 'var(--color-text-muted)' }}>➔</span>
-                        </div>
-                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{renderTotals(billTotals)}</div>
-                        <div className="text-secondary" style={{ fontSize: '14px' }}>{unpaidBills.length} unpaid</div>
-
-                        {/* Inline Action */}
-                        <object style={{ position: 'absolute', bottom: 'var(--space-md)', right: 'var(--space-md)' }}>
-                            <Link href="/bills/add" className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '18px' }}>+</Link>
-                        </object>
-                    </div>
-                </Link>
-
-                <Link href="/loans" style={{ flex: 1, minHeight: 0 }}>
-                    <div className="card" style={{ height: '100%', padding: 'var(--space-md)', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'auto' }}>
-                            <div className="text-muted text-sm">Loans Outstanding</div>
-                            <span style={{ fontSize: '20px', color: 'var(--color-text-muted)' }}>➔</span>
-                        </div>
-                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{renderTotals(loanTotals)}</div>
-                        <div className="text-secondary" style={{ fontSize: '14px' }}>{loans.length} active</div>
-
-                        <object style={{ position: 'absolute', bottom: 'var(--space-md)', right: 'var(--space-md)' }}>
-                            <Link href="/loans/add" className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '18px' }}>+</Link>
-                        </object>
-                    </div>
-                </Link>
-
-                <Link href="/savings" style={{ flex: 1, minHeight: 0 }}>
-                    <div className="card" style={{ height: '100%', padding: 'var(--space-md)', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'auto' }}>
-                            <div className="text-muted text-sm">Owe Yourself</div>
-                            <span style={{ fontSize: '20px', color: 'var(--color-text-muted)' }}>➔</span>
-                        </div>
-                        <div className="font-bold" style={{ fontSize: '32px', marginBottom: '2px' }}>{renderTotals(savingsTotals)}</div>
-                        <div className="text-secondary" style={{ fontSize: '14px' }}>{withdrawals.length} withdrawal{withdrawals.length !== 1 ? 's' : ''}</div>
-
-                        <object style={{ position: 'absolute', bottom: 'var(--space-md)', right: 'var(--space-md)' }}>
-                            <Link href="/savings/add" className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '18px' }}>+</Link>
-                        </object>
-                    </div>
-                </Link>
-
-                {/* Household - Compact & Bottom Aligned */}
-                <div style={{ marginTop: 'auto', flexShrink: 0 }}>
-                    <div className="card" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span className="text-muted text-sm">Household:</span>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                                {householdMembers.map(member => (
-                                    <span key={member.id} style={{ fontSize: '16px' }}>{member.avatarEmoji}</span>
-                                ))}
+                <Link href="/bills">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer group">
+                        <CardContent className="p-5 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="h-10 w-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                                    <Receipt className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold leading-none">Bills</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {bills.filter(b => !b.isPaid).length} unpaid
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                        <Link href="/settings" style={{ fontSize: '12px', color: 'var(--color-primary)' }}>Manage</Link>
-                    </div>
-                </div>
+                            <div className="text-right">
+                                <span className="font-bold text-lg block">
+                                    {formatAmount(bills.reduce((acc, b) => acc + (b.currency === 'EUR' ? b.amount : 0), 0), 'EUR')}
+                                </span>
+                                <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-1">
+                                    View <ArrowRight className="h-3 w-3" />
+                                </span>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
+                <Link href="/loans">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer group">
+                        <CardContent className="p-5 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="h-10 w-10 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-500">
+                                    <Wallet className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold leading-none">Loans</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {loans.length} active
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <span className="font-bold text-lg block">
+                                    {formatAmount(loans.reduce((acc, l) => acc + (l.currency === 'EUR' ? l.remainingAmount : 0), 0), 'EUR')}
+                                </span>
+                                <span className="text-xs text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-1">
+                                    View <ArrowRight className="h-3 w-3" />
+                                </span>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </Link>
+
+                <div className="cursor-default">
+                    <Card>
+                        <CardContent className="p-5 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                                    <PiggyBank className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold leading-none">Savings</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Total Assets
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <span className="font-bold text-lg block text-emerald-500">
+                                    {formatAmount(savingsTotal, 'EUR')}
+                                </span>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
-
-            {/* Logout Confirmation Modal */}
-            {showLogoutConfirm && (
-                <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '300px', padding: 'var(--space-lg)' }}>
-                        <h3 className="font-semibold" style={{ marginBottom: 'var(--space-md)' }}>Sign Out?</h3>
-                        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                            <button onClick={() => setShowLogoutConfirm(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
-                            <button onClick={handleLogout} className="btn btn-primary" style={{ flex: 1, background: 'var(--color-error)' }}>Sign Out</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

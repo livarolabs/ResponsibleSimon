@@ -17,7 +17,10 @@ export default function BottomNav() {
     return (
         <nav className="bottom-nav">
             {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                // Check if active (exact match or sub-path)
+                const isActive = item.href === '/dashboard'
+                    ? pathname === '/dashboard'
+                    : pathname.startsWith(item.href);
 
                 return (
                     <Link
@@ -26,6 +29,7 @@ export default function BottomNav() {
                         className={`nav-item ${isActive ? 'active' : ''}`}
                     >
                         <span className="nav-item-icon">{item.icon}</span>
+                        {/* Label hidden via CSS for minimal look */}
                         <span className="nav-item-label">{item.label}</span>
                     </Link>
                 );

@@ -1,176 +1,168 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getLoans, deleteLoan, Loan } from '@/lib/loans-service';
 import { formatAmount } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Plus, Trash2, Wallet, User, Calendar } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function LoansPage() {
     const { household, householdMembers } = useAuth();
+    const router = useRouter();
     const [loans, setLoans] = useState<Loan[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
     const [ownerFilter, setOwnerFilter] = useState<string | 'all'>('all');
 
-    useEffect(() => {
-        loadLoans();
-    }, [household]);
-
-    const loadLoans = async () => {
+    const loadLoans = useCallback(async () => {
         if (!household) return;
         try {
             const data = await getLoans(household.id);
             setLoans(data);
         } catch (err) {
             console.error('Error loading loans:', err);
-            setError('Failed to load loans');
         } finally {
             setLoading(false);
         }
-    };
+    }, [household]);
+
+    useEffect(() => {
+        loadLoans();
+    }, [loadLoans]);
 
     const handleDelete = async (loanId: string) => {
         if (!confirm('Delete this loan?')) return;
         try {
             await deleteLoan(loanId);
-            await loadLoans();
+            loadLoans();
         } catch (err) {
             console.error('Error deleting loan:', err);
         }
     };
 
-    // Get member info
-    const getMember = (ownerId: string) => {
-        return householdMembers.find(m => m.id === ownerId);
-    };
-
-    // Filter by owner
     const filteredLoans = ownerFilter === 'all'
         ? loans
         : loans.filter(l => l.ownerId === ownerFilter);
 
-    const totalOutstanding = filteredLoans.reduce((sum, l) => sum + l.remainingAmount, 0);
-
     if (loading) {
-        return <div className="page"><div className="skeleton" style={{ height: 200 }}></div></div>;
+        return (
+            <div className="container max-w-md mx-auto p-6 space-y-6 flex flex-col items-center justify-center min-h-screen">
+                <Skeleton className="w-full h-20 rounded-xl" />
+                <Skeleton className="w-full h-40 rounded-xl" />
+                <Skeleton className="w-full h-40 rounded-xl" />
+            </div>
+        );
     }
 
     return (
-        <div className="page">
-            <div className="page-header">
-                <h1 className="page-title">💳 Loans</h1>
-                <p className="page-subtitle">Track what you owe</p>
-            </div>
-
-            {error && <div className="card" style={{ background: 'rgba(239, 68, 68, 0.1)', marginBottom: 'var(--space-md)' }}>{error}</div>}
-
-            {/* Owner Filter */}
-            <div style={{ display: 'flex', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
-                <button
-                    onClick={() => setOwnerFilter('all')}
-                    className={`btn ${ownerFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 12px', fontSize: 'var(--font-size-sm)' }}
+        <div className="container max-w-md mx-auto p-6 pb-24 space-y-6">
+            <header className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Personal Loans</h1>
+                    <p className="text-muted-foreground font-medium">Track your debt</p>
+                </div>
+                <Button
+                    size="icon"
+                    className="rounded-full h-10 w-10 shadow-lg"
+                    onClick={() => router.push('/loans/add')}
                 >
-                    All
-                </button>
-                {householdMembers.map(member => (
-                    <button
-                        key={member.id}
-                        onClick={() => setOwnerFilter(member.id)}
-                        className={`btn ${ownerFilter === member.id ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '6px 12px', fontSize: 'var(--font-size-sm)' }}
-                    >
-                        {member.avatarEmoji} {member.displayName}
-                    </button>
-                ))}
-            </div>
+                    <Plus className="h-6 w-6" />
+                </Button>
+            </header>
 
-            {/* Stats Card */}
-            <div className="card card-primary" style={{ marginBottom: 'var(--space-lg)' }}>
-                <div className="text-muted">Total Outstanding {ownerFilter !== 'all' && `(${getMember(ownerFilter)?.displayName})`}</div>
-                <div className="amount-large">{filteredLoans.length > 0 ? formatAmount(totalOutstanding, filteredLoans[0]?.currency || 'EUR') : '€0.00'}</div>
-                <div className="text-secondary">{filteredLoans.length} active loan{filteredLoans.length !== 1 ? 's' : ''}</div>
-            </div>
+            {/* Filter Pills */}
+            <ScrollArea className="w-full whitespace-nowrap">
+                <div className="flex gap-2 pb-2">
+                    <Button
+                        variant={ownerFilter === 'all' ? 'default' : 'outline'}
+                        size="sm"
+                        className="rounded-full px-4"
+                        onClick={() => setOwnerFilter('all')}
+                    >
+                        All
+                    </Button>
+                    {householdMembers.map(m => (
+                        <Button
+                            key={m.id}
+                            variant={ownerFilter === m.id ? 'default' : 'outline'}
+                            size="sm"
+                            className="rounded-full px-4 flex items-center gap-1"
+                            onClick={() => setOwnerFilter(m.id)}
+                        >
+                            <User className="h-3 w-3" />
+                            {m.displayName.split(' ')[0]}
+                        </Button>
+                    ))}
+                </div>
+                <ScrollBar orientation="horizontal" className="hidden" />
+            </ScrollArea>
 
             {/* Loans List */}
-            {filteredLoans.map(loan => {
-                const progress = Math.round(((loan.originalAmount - loan.remainingAmount) / loan.originalAmount) * 100);
-                const member = getMember(loan.ownerId);
-                return (
-                    <div key={loan.id} className="card" style={{ marginBottom: 'var(--space-sm)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-sm)' }}>
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                    <span className="font-semibold">{loan.name}</span>
-                                    {member && (
-                                        <span style={{
-                                            fontSize: 'var(--font-size-xs)',
-                                            padding: '2px 6px',
-                                            borderRadius: 'var(--radius-full)',
-                                            background: 'var(--color-primary)',
-                                            color: 'white'
-                                        }}>
-                                            {member.avatarEmoji} {member.displayName}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="text-muted text-sm">{loan.lender}</div>
-
-                                {/* Installment & Payoff Info */}
-                                {loan.monthlyInstallment && loan.monthlyInstallment > 0 && loan.remainingAmount > 0 && (
-                                    <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-sm)' }}>
-                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                                            Monthly: <span style={{ color: 'var(--color-text)' }}>{formatAmount(loan.monthlyInstallment, loan.currency)}</span>
-                                        </div>
-                                        {(() => {
-                                            const monthsLeft = Math.ceil(loan.remainingAmount / loan.monthlyInstallment);
-                                            const payoffDate = new Date();
-                                            payoffDate.setMonth(payoffDate.getMonth() + monthsLeft);
-                                            return (
-                                                <div style={{ fontSize: '12px', color: 'var(--color-success)', marginTop: '2px' }}>
-                                                    Payoff estimate: {payoffDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                                                    <span style={{ opacity: 0.7 }}> ({monthsLeft} months)</span>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                )}
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div className="font-semibold">{formatAmount(loan.remainingAmount, loan.currency)}</div>
-                                <div className="text-muted text-sm">of {formatAmount(loan.originalAmount, loan.currency)}</div>
-                            </div>
-                        </div>
-                        <div className="progress-bar">
-                            <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-sm)' }}>
-                            <span className="text-muted text-sm">{progress}% paid off</span>
-                            <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                                <Link href={`/loans/${loan.id}/pay`} className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 'var(--font-size-sm)' }}>
-                                    Make Payment
-                                </Link>
-                                <button onClick={() => handleDelete(loan.id)} className="text-muted" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>🗑️</button>
-                            </div>
-                        </div>
+            <div className="space-y-4">
+                {filteredLoans.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground border-2 border-dashed border-muted rounded-3xl bg-muted/10">
+                        <Wallet className="h-10 w-10 mb-4 opacity-50" />
+                        <p>No loans found.</p>
                     </div>
-                );
-            })}
+                ) : (
+                    filteredLoans.map((loan) => {
+                        const progress = ((loan.originalAmount - loan.remainingAmount) / loan.originalAmount) * 100;
+                        return (
+                            <Card key={loan.id} className="overflow-hidden border-border/50 shadow-sm hover:shadow-md transition-all">
+                                <CardContent className="p-5">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="font-semibold text-lg">{loan.name}</h3>
+                                            <p className="text-sm text-muted-foreground">{loan.lender}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-bold text-xl tracking-tight">
+                                                {formatAmount(loan.remainingAmount, loan.currency)}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                of {formatAmount(loan.originalAmount, loan.currency)}
+                                            </div>
+                                        </div>
+                                    </div>
 
-            {/* Empty State */}
-            {filteredLoans.length === 0 && (
-                <div className="empty-state">
-                    <p style={{ fontSize: '48px', marginBottom: 'var(--space-md)' }}>💳</p>
-                    <h3>No active loans {ownerFilter !== 'all' ? `for ${getMember(ownerFilter)?.displayName}` : ''}</h3>
-                    <p className="text-muted">Add a loan to start tracking your debt</p>
-                </div>
-            )}
+                                    <div className="space-y-2 mb-4">
+                                        <div className="flex justify-between text-xs font-medium">
+                                            <span className="text-muted-foreground">{Math.round(progress)}% Paid off</span>
+                                            <span className="text-muted-foreground">{loan.monthlyInstallment ? formatAmount(loan.monthlyInstallment, loan.currency) + '/mo' : ''}</span>
+                                        </div>
+                                        <Progress value={progress} className="h-2" />
+                                    </div>
 
-            {/* Add Button */}
-            <Link href="/loans/add" className="btn btn-primary btn-full" style={{ marginTop: 'var(--space-lg)' }}>
-                + Add Loan
-            </Link>
+                                    <div className="flex justify-between items-center pt-2 border-t border-border/50">
+                                        <div className="flex items-center gap-2">
+                                            {loan.interestRate > 0 && (
+                                                <Badge variant="secondary" className="text-[10px] h-5">
+                                                    {loan.interestRate}% APR
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
+                                            onClick={() => handleDelete(loan.id)}
+                                        >
+                                            Delete
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })
+                )}
+            </div>
         </div>
     );
 }

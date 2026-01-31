@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/contexts/AuthContext';
 import './globals.css';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
     title: 'ResponsibleSimon - Personal Finance Tracker',
@@ -25,7 +28,7 @@ export const viewport: Viewport = {
     initialScale: 1,
     maximumScale: 1,
     userScalable: false,
-    themeColor: '#0a0a0f',
+    themeColor: '#09090b', // zinc-950
     viewportFit: 'cover',
 };
 
@@ -36,11 +39,7 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en">
-            <head>
-                <link rel="preconnect" href="https://fonts.googleapis.com" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-            </head>
-            <body>
+            <body className={inter.className}>
                 <AuthProvider>
                     {children}
                 </AuthProvider>
